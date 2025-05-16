@@ -8,6 +8,8 @@ const { Server } = require("socket.io");
 
 const authRoutes = require("./routes/auth");
 const socketHandler = require("./socket/socketHandler");
+const { SocketEvents } = require("./contants/constants");
+const { setUserObject } = require("./socket/state/userObjects");
 
 const app = express();
 
@@ -22,8 +24,6 @@ const io = new Server(server, {
     origin: "*",
   },
 });
-
-const userObjects = new Map(); // userId -> userObject
 
 io.use((socket, next) => {
   const token = socket.handshake.auth.token;
@@ -41,10 +41,10 @@ io.use((socket, next) => {
   }
 });
 
-io.on("connection", (socket) => {
+io.on(SocketEvents.CONNECTION, (socket) => {
   const userId = socket.user.id;
-  userObjects.set(userId, socket.user);
-  socketHandler(io, socket, userObjects);
+  setUserObject(userId, socket.user);
+  socketHandler(io, socket);
 });
 
 const connectMongo = async () => {
