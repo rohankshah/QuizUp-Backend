@@ -1,7 +1,5 @@
 const queue = [];
 
-console.log("queue", queue);
-
 module.exports = {
   enqueue: (userId) => !queue.includes(userId) && queue.push(userId),
   dequeuePair: () => queue.splice(0, 2),

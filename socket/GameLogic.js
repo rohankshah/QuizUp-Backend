@@ -46,23 +46,21 @@ async function waitForAnswers(
     let resolved = false;
     let answers = {};
 
-    function cleanUp() {
-      socket1.off(SocketEvents.QUIZ_ANSWER_RECEIVE_EVENT, answer1);
-      socket2.off(SocketEvents.QUIZ_ANSWER_RECEIVE_EVENT, answer1);
-    }
-
     function checkAndResolve() {
-      if (!resolved && (answers[player1] || answers[player2])) {
-        if (answers[player1] !== undefined && answers[player2] !== undefined) {
-          resolved = true;
-          cleanUp();
-          resolve(answers);
-        }
+      if (
+        !resolved &&
+        answers[player1] !== undefined &&
+        answers[player2] !== undefined
+      ) {
+        resolved = true;
+        cleanUp();
+        resolve(answers);
       }
     }
 
     function answer1(data) {
       if (data.questionIndex === questionIndex) {
+        console.log("1");
         answers[player1] = data.answer;
         checkAndResolve();
       }
@@ -70,6 +68,7 @@ async function waitForAnswers(
 
     function answer2(data) {
       if (data.questionIndex === questionIndex) {
+        console.log("2");
         answers[player2] = data.answer;
         checkAndResolve();
       }
@@ -77,6 +76,11 @@ async function waitForAnswers(
 
     socket1.on(SocketEvents.QUIZ_ANSWER_RECEIVE_EVENT, answer1);
     socket2.on(SocketEvents.QUIZ_ANSWER_RECEIVE_EVENT, answer2);
+
+    function cleanUp() {
+      socket1.off(SocketEvents.QUIZ_ANSWER_RECEIVE_EVENT, answer1);
+      socket2.off(SocketEvents.QUIZ_ANSWER_RECEIVE_EVENT, answer2);
+    }
 
     setTimeout(() => {
       resolved = true;
@@ -86,7 +90,7 @@ async function waitForAnswers(
   });
 }
 
-async function runQuizLogic(io, player1, player2) {
+async function runQuizLoop(io, player1, player2) {
   const socket1 = getSocketIdByPlayerId(io, player1);
   const socket2 = getSocketIdByPlayerId(io, player2);
 
@@ -96,10 +100,12 @@ async function runQuizLogic(io, player1, player2) {
     socket1.emit(SocketEvents.QUIZ_QUESTION_SEND_EVENT, {
       question: questionObj.question,
       options: questionObj.options,
+      questionIndex: i,
     });
     socket2.emit(SocketEvents.QUIZ_QUESTION_SEND_EVENT, {
       question: questionObj.question,
       options: questionObj.options,
+      questionIndex: i,
     });
 
     const answers = await waitForAnswers(socket1, socket2, player1, player2, i);
@@ -107,4 +113,4 @@ async function runQuizLogic(io, player1, player2) {
   }
 }
 
-module.exports = { tryMatchUsers, runQuizLogic };
+module.exports = { tryMatchUsers, runQuizLoop };

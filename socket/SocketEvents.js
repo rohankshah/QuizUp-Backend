@@ -1,4 +1,4 @@
-const { tryMatchUsers, runQuizLogic } = require("./GameLogic");
+const { tryMatchUsers, runQuizLoop } = require("./GameLogic");
 const { removeActiveUser } = require("./state/activeUsers");
 const {
   getMatchReadiness,
@@ -21,7 +21,7 @@ function handleClientReady(io, matchId, userId) {
   match.ready.add(userId);
 
   if (match.ready.size === 2) {
-    runQuizLogic(io, ...match.players);
+    runQuizLoop(io, ...match.players);
     deleteMatchReadiness(matchId);
   }
 }
