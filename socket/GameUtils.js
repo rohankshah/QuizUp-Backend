@@ -5,4 +5,8 @@ function getSocketIdByPlayerId(io, playerId) {
   return socket;
 }
 
-module.exports = { getSocketIdByPlayerId };
+function delay(seconds) {
+  return new Promise((resolve) => setTimeout(resolve, seconds * 1000));
+}
+
+module.exports = { getSocketIdByPlayerId, delay };
