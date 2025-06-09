@@ -6,9 +6,8 @@ const SocketEvents = {
   CLIENT_READY: "client-ready",
   QUIZ_QUESTION_SEND_EVENT: "quiz-question-send-event",
   QUIZ_ANSWER_RECEIVE_EVENT: "quiz-answer-receive-event",
-  QUIZ_CORRECT_ANSWER_EVENT: "quiz-correct-answer-event",
-  QUIZ_INCORRECT_ANSWER_EVENT: "quiz-incorrect-answer-event",
   QUIZ_ANSWER_RESULT_EVENT: "quiz-answer-result-event",
+  QUIZ_HANDLE_RESULTS_EVENT: "quiz-handle-results-event",
   DISCONNECT: "disconnect",
 };
 

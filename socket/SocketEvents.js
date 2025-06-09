@@ -5,11 +5,13 @@ const {
   deleteMatchReadiness,
 } = require("./state/matchReadiness");
 const { isInQueue, enqueue, removeFromQueue } = require("./state/queue");
+const { getUserObject } = require("./state/userObjects");
 
 function handleJoinQueue(io, userId) {
   if (!isInQueue(userId)) {
     enqueue(userId);
-    console.log(`${userId} joined the queue`);
+    const userObj = getUserObject(userId);
+    console.log(`${userObj.username} joined the queue`);
   }
   tryMatchUsers(io);
 }
@@ -20,8 +22,8 @@ function handleClientReady(io, matchId, userId) {
 
   match.ready.add(userId);
 
-  if (match.ready.size === 2) {
-    runQuizLoop(io, ...match.players);
+  if (match.ready.size === 3) {
+    runQuizLoop(io, match.players);
     deleteMatchReadiness(matchId);
   }
 }
@@ -29,7 +31,8 @@ function handleClientReady(io, matchId, userId) {
 function handleDisconnect(userId) {
   removeActiveUser(userId);
   removeFromQueue(userId);
-  console.log(`${userId} disconnected`);
+  const userObj = getUserObject(userId);
+  console.log(`${userObj.username} disconnected`);
 }
 
 module.exports = {

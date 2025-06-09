@@ -1,56 +1,60 @@
 const { SocketEvents } = require("../contants/constants");
 const questions = require("../questions");
-const { getSocketIdByPlayerId, delay } = require("./GameUtils");
+const {
+  getSocketIdByPlayerId,
+  delay,
+  createScoreArray,
+  processAnswers,
+} = require("./GameUtils");
+const { emitToMultipleSockets, emitToSingleSocket } = require("./SocketUtils");
 const { setMatchReadiness } = require("./state/matchReadiness");
-const { hasPair, dequeuePair } = require("./state/queue");
+const { hasGroup, dequeueGroup } = require("./state/queue");
 const { getUserObject } = require("./state/userObjects");
 
-function tryMatchUsers(io) {
-  while (hasPair()) {
-    const [player1, player2] = dequeuePair();
+function tryMatchUsers(io, number_of_players = 3) {
+  while (hasGroup(number_of_players)) {
+    const players = dequeueGroup(number_of_players);
 
-    const socket1 = getSocketIdByPlayerId(io, player1);
-    const socket2 = getSocketIdByPlayerId(io, player2);
+    const sockets = players.map((playerId) =>
+      getSocketIdByPlayerId(io, playerId)
+    );
 
-    const matchId = `${player1}_${player2}_${Date.now()}`;
+    const matchId = `${players.join("_")}_${Date.now()}`;
 
-    socket1.emit(SocketEvents.MATCHED, {
-      opponentObj: getUserObject(player2),
-      matchId: matchId,
+    players.forEach((playerId, index) => {
+      const socket = sockets[index];
+      const opponents = players.filter((id) => id !== playerId);
+
+      emitToSingleSocket(socket, SocketEvents.MATCHED, {
+        opponentObjs: opponents.map((opponentId) => getUserObject(opponentId)),
+        matchId: matchId,
+        totalPlayers: number_of_players,
+      });
     });
-    socket2.emit(SocketEvents.MATCHED, {
-      opponentObj: getUserObject(player1),
-      matchId: matchId,
-    });
 
-    io.to(socket1.id).emit(SocketEvents.START_QUIZ, { matchId });
-    io.to(socket2.id).emit(SocketEvents.START_QUIZ, { matchId });
+    emitToMultipleSockets(io, sockets, SocketEvents.START_QUIZ, { matchId });
 
-    console.log(`Match started: ${player1} vs ${player2}`);
+    console.log(
+      `Match started: ${players.join(" vs ")} (${number_of_players} players)`
+    );
 
     setMatchReadiness(matchId, {
       ready: new Set(),
-      players: [player1, player2],
+      players: players,
     });
   }
 }
 
-async function waitForAnswers(
-  socket1,
-  socket2,
-  player1,
-  player2,
-  questionIndex
-) {
+async function waitForAnswers(sockets, players, questionIndex) {
   return new Promise((resolve) => {
     let resolved = false;
     let answers = {};
+    const answerHandlers = [];
 
     function checkAndResolve() {
       if (
         !resolved &&
-        answers[player1] !== undefined &&
-        answers[player2] !== undefined
+        players.every((playerId) => answers[playerId] !== undefined)
       ) {
         resolved = true;
         cleanUp();
@@ -58,89 +62,78 @@ async function waitForAnswers(
       }
     }
 
-    function answer1(data) {
-      if (data.questionIndex === questionIndex) {
-        answers[player1] = data.answer;
-        checkAndResolve();
-      }
+    function createAnswerHandler(playerId) {
+      return function (data) {
+        if (data.questionIndex === questionIndex) {
+          answers[playerId] = data.answer;
+          checkAndResolve();
+        }
+      };
     }
 
-    function answer2(data) {
-      if (data.questionIndex === questionIndex) {
-        answers[player2] = data.answer;
-        checkAndResolve();
-      }
-    }
-
-    socket1.on(SocketEvents.QUIZ_ANSWER_RECEIVE_EVENT, answer1);
-    socket2.on(SocketEvents.QUIZ_ANSWER_RECEIVE_EVENT, answer2);
+    // Create answer handlers for each player and attach to their sockets
+    players.forEach((playerId, index) => {
+      const socket = sockets[index];
+      const answerHandler = createAnswerHandler(playerId);
+      answerHandlers.push({ socket, handler: answerHandler });
+      socket.on(SocketEvents.QUIZ_ANSWER_RECEIVE_EVENT, answerHandler);
+    });
 
     function cleanUp() {
-      socket1.off(SocketEvents.QUIZ_ANSWER_RECEIVE_EVENT, answer1);
-      socket2.off(SocketEvents.QUIZ_ANSWER_RECEIVE_EVENT, answer2);
+      answerHandlers.forEach(({ socket, handler }) => {
+        socket.off(SocketEvents.QUIZ_ANSWER_RECEIVE_EVENT, handler);
+      });
     }
 
+    // Timeout after 10 seconds
     setTimeout(() => {
-      resolved = true;
-      cleanUp();
-      resolve(answers);
+      if (!resolved) {
+        resolved = true;
+        cleanUp();
+        resolve(answers);
+      }
     }, 10000);
   });
 }
 
-async function runQuizLoop(io, player1, player2) {
-  const scoreMap = new Map(); // userId -> score
-  const socket1 = getSocketIdByPlayerId(io, player1);
-  const socket2 = getSocketIdByPlayerId(io, player2);
+async function handleQuizResults(io, sockets, scoreObj) {
+  emitToMultipleSockets(io, sockets, SocketEvents.QUIZ_HANDLE_RESULTS_EVENT, {
+    scoreObj,
+  });
+}
 
-  for (let i = 0; i <= 9; i++) {
+async function runQuizLoop(io, players) {
+  const scoreMap = new Map(); // userId -> score
+  const sockets = players.map((playerId) =>
+    getSocketIdByPlayerId(io, playerId)
+  );
+
+  for (let i = 0; i <= 1; i++) {
     const questionObj = questions[i];
     const correctAnswer = questionObj.correctAnswer;
 
     // console.log(`Question ${i + 1} sent`);
 
-    socket1.emit(SocketEvents.QUIZ_QUESTION_SEND_EVENT, {
-      question: questionObj.question,
-      options: questionObj.options,
-      questionIndex: i,
-    });
-    socket2.emit(SocketEvents.QUIZ_QUESTION_SEND_EVENT, {
+    emitToMultipleSockets(io, sockets, SocketEvents.QUIZ_QUESTION_SEND_EVENT, {
       question: questionObj.question,
       options: questionObj.options,
       questionIndex: i,
     });
 
-    const answers = await waitForAnswers(socket1, socket2, player1, player2, i);
+    const answers = await waitForAnswers(sockets, players, i);
 
-    const answerResults = {};
-    const playersBySelectedOption = new Map(); // option -> players who select option Array
-
-    for (const [playerId, selectedAnswer] of Object.entries(answers)) {
-      const isCorrect = selectedAnswer === correctAnswer;
-      answerResults[playerId] = { isCorrect, selectedAnswer };
-
-      const oldSelectedOptionsArr =
-        playersBySelectedOption.get(selectedAnswer) || [];
-      playersBySelectedOption.set(selectedAnswer, [
-        ...oldSelectedOptionsArr,
-        getUserObject(playerId).username,
-      ]);
-
-      console.log("playersBySelectedOption", playersBySelectedOption);
-
-      // Update score
-      if (isCorrect) {
-        const oldValue = scoreMap.get(playerId) || 0;
-        scoreMap.set(playerId, oldValue + 1);
-      }
-    }
+    const { answerResults, playersBySelectedOption } = processAnswers(
+      answers,
+      correctAnswer,
+      scoreMap
+    );
 
     // Emit correct/incorrect to each player
     for (const playerId of Object.keys(answers)) {
       const socket = getSocketIdByPlayerId(io, playerId);
       const { isCorrect, selectedAnswer } = answerResults[playerId];
 
-      socket.emit(SocketEvents.QUIZ_ANSWER_RESULT_EVENT, {
+      emitToSingleSocket(socket, SocketEvents.QUIZ_ANSWER_RESULT_EVENT, {
         isCorrect,
         correctAnswer,
         selectedAnswer,
@@ -153,7 +146,9 @@ async function runQuizLoop(io, player1, player2) {
     await delay(3);
   }
 
-  console.log("scoreMap", scoreMap);
+  const finalScore = createScoreArray(scoreMap);
+
+  handleQuizResults(io, sockets, finalScore);
 }
 
 module.exports = { tryMatchUsers, runQuizLoop };
