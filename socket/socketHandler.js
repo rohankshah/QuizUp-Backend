@@ -14,19 +14,21 @@ const { addActiveUser } = require("./state/activeUsers");
 // "start-quiz" event emitted
 // Listen for "client-ready" event. Once both clients send event (track using set in the matchReadiness object), questions are sent
 
-function socketHandler(io, socket) {
+function socketHandler(io, socket, pubClient) {
   const userId = socket.user.id;
   addActiveUser(userId, socket.id);
 
-  socket.on(SocketEvents.JOIN_QUEUE, () => handleJoinQueue(io, userId));
+  socket.on(SocketEvents.JOIN_QUEUE, () => handleJoinQueue(io, socket));
 
-  socket.on(SocketEvents.CREATE_ROOM, () => handleCreateRoom(io, userId));
-
-  socket.on(SocketEvents.CLIENT_READY, (matchId) =>
-    handleClientReady(io, matchId, userId)
+  socket.on(SocketEvents.CREATE_ROOM, () =>
+    handleCreateRoom(io, socket, pubClient)
   );
 
-  socket.on(SocketEvents.DISCONNECT, () => handleDisconnect(userId));
+  socket.on(SocketEvents.CLIENT_READY, (matchId) =>
+    handleClientReady(io, matchId, socket)
+  );
+
+  socket.on(SocketEvents.DISCONNECT, () => handleDisconnect(socket));
 }
 
 module.exports = socketHandler;

@@ -2,6 +2,7 @@ const SocketEvents = {
   CONNECTION: "connection",
   JOIN_QUEUE: "join-queue",
   CREATE_ROOM: "create-room",
+  ROOM_JOINED: "room-joined",
   MATCHED: "matched",
   START_QUIZ: "start-quiz",
   CLIENT_READY: "client-ready",
@@ -14,4 +15,6 @@ const SocketEvents = {
 
 const number_of_players = 2;
 
-module.exports = { SocketEvents, number_of_players };
+const room_ttl = 7200; // 2 hours
+
+module.exports = { SocketEvents, number_of_players, room_ttl };

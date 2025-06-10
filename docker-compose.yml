@@ -15,6 +15,16 @@ services:
     volumes:
       - redis-data:/data
 
+  redis-insight:
+    image: redislabs/redisinsight:latest
+    ports:
+      - "5540:5540"
+    volumes:
+      - redis-insight-data:/db
+    depends_on:
+      - redis
+
 volumes:
   mongo-data:
   redis-data:
+  redis-insight-data:

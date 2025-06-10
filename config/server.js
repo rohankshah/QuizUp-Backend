@@ -36,7 +36,7 @@ function initializeServer(app, pubClient, subClient) {
   io.on(SocketEvents.CONNECTION, (socket) => {
     const userId = socket.user.id;
     setUserObject(userId, socket.user);
-    socketHandler(io, socket);
+    socketHandler(io, socket, pubClient);
   });
 
   return server;
