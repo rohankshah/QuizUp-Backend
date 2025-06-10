@@ -3,6 +3,7 @@ const {
   handleJoinQueue,
   handleClientReady,
   handleDisconnect,
+  handleCreateRoom,
 } = require("./SocketEvents");
 const { addActiveUser } = require("./state/activeUsers");
 
@@ -17,9 +18,9 @@ function socketHandler(io, socket) {
   const userId = socket.user.id;
   addActiveUser(userId, socket.id);
 
-  socket.on(SocketEvents.JOIN_QUEUE, () =>
-    handleJoinQueue(io, userId)
-  );
+  socket.on(SocketEvents.JOIN_QUEUE, () => handleJoinQueue(io, userId));
+
+  socket.on(SocketEvents.CREATE_ROOM, () => handleCreateRoom(io, userId));
 
   socket.on(SocketEvents.CLIENT_READY, (matchId) =>
     handleClientReady(io, matchId, userId)

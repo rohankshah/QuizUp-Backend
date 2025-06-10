@@ -1,4 +1,5 @@
-const { SocketEvents } = require("../contants/constants");
+const { debounce } = require("lodash");
+const { SocketEvents, number_of_players } = require("../contants/constants");
 const questions = require("../questions");
 const {
   getSocketIdByPlayerId,
@@ -11,7 +12,14 @@ const { setMatchReadiness } = require("./state/matchReadiness");
 const { hasGroup, dequeueGroup } = require("./state/queue");
 const { getUserObject } = require("./state/userObjects");
 
-function tryMatchUsers(io, number_of_players = 3) {
+// Add locking + debounce
+// TODO: Add locking using redis. Practise lock with TTL mechanism
+let isMatching = false;
+
+function _tryMatchUsers(io) {
+  if (isMatching) return;
+  isMatching = true;
+
   while (hasGroup(number_of_players)) {
     const players = dequeueGroup(number_of_players);
 
@@ -43,7 +51,11 @@ function tryMatchUsers(io, number_of_players = 3) {
       players: players,
     });
   }
+
+  isMatching = false;
 }
+
+const tryMatchUsers = debounce(_tryMatchUsers, 50);
 
 async function waitForAnswers(sockets, players, questionIndex) {
   return new Promise((resolve) => {

@@ -1,3 +1,4 @@
+const { number_of_players } = require("../contants/constants");
 const { tryMatchUsers, runQuizLoop } = require("./GameLogic");
 const { removeActiveUser } = require("./state/activeUsers");
 const {
@@ -16,13 +17,20 @@ function handleJoinQueue(io, userId) {
   tryMatchUsers(io);
 }
 
+function handleCreateRoom(io, userId) {
+  // Check if user isn't in any other room??
+  // Generate roomId
+  // Store roomId on redis (add ttl so room automatically expires after a while)
+  // Emit roomId to user
+}
+
 function handleClientReady(io, matchId, userId) {
   const match = getMatchReadiness(matchId);
   if (!match) return;
 
   match.ready.add(userId);
 
-  if (match.ready.size === 3) {
+  if (match.ready.size === number_of_players) {
     runQuizLoop(io, match.players);
     deleteMatchReadiness(matchId);
   }
@@ -37,6 +45,7 @@ function handleDisconnect(userId) {
 
 module.exports = {
   handleJoinQueue,
+  handleCreateRoom,
   handleClientReady,
   handleDisconnect,
 };

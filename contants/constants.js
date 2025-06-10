@@ -1,6 +1,7 @@
 const SocketEvents = {
   CONNECTION: "connection",
   JOIN_QUEUE: "join-queue",
+  CREATE_ROOM: "create-room",
   MATCHED: "matched",
   START_QUIZ: "start-quiz",
   CLIENT_READY: "client-ready",
@@ -11,4 +12,6 @@ const SocketEvents = {
   DISCONNECT: "disconnect",
 };
 
-module.exports = { SocketEvents };
+const number_of_players = 2;
+
+module.exports = { SocketEvents, number_of_players };
