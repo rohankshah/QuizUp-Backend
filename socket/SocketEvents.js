@@ -3,7 +3,13 @@ const {
   room_ttl,
   SocketEvents,
 } = require("../contants/constants");
-const { tryMatchUsers, runQuizLoop } = require("./GameLogic");
+const {
+  tryMatchUsers,
+  runQuizLoop,
+  runQuizLoopForRoom,
+} = require("./GameLogic");
+const { removePlayerFromRoom, delay } = require("./GameUtils");
+const { emitToRoom } = require("./SocketUtils");
 const { removeActiveUser } = require("./state/activeUsers");
 const {
   getMatchReadiness,
@@ -56,12 +62,121 @@ async function handleCreateRoom(io, socket, pubClient) {
     })
     .expire(roomKey, room_ttl)
     .hSet(userKey, "currentRoom", roomId)
+    .expire(userKey, room_ttl)
     .exec();
 
   // Join room
   socket.join(roomId);
 
   socket.emit(SocketEvents.ROOM_JOINED, { roomId });
+}
+
+async function handleJoinRoom(io, socket, pubClient, roomId) {
+  const userId = socket.user.id;
+  if (!userId) return;
+
+  // Check if user is already in a room
+  const existingRoom = await pubClient.hGet(`user:${userId}`, "currentRoom");
+  if (existingRoom) {
+    socket.emit("error", {
+      message: `You are already in a room: ${existingRoom}`,
+    });
+    return;
+  }
+
+  const roomKey = `room:${roomId}`;
+  const userKey = `user:${userId}`;
+
+  const roomExists = await pubClient.exists(roomKey);
+  if (!roomExists) {
+    socket.emit("error", {
+      message: `Room ${roomId} does not exist.`,
+    });
+    return;
+  }
+
+  const roomData = await pubClient.hGet(roomKey, "players");
+  let players = [];
+  try {
+    players = JSON.parse(roomData);
+  } catch (err) {
+    players = [];
+  }
+
+  if (!players.includes(userId)) {
+    players.push(userId);
+    await pubClient
+      .multi()
+      .hSet(roomKey, "players", JSON.stringify(players))
+      .hSet(userKey, "currentRoom", roomId)
+      .expire(userKey, room_ttl)
+      .exec();
+  }
+
+  socket.join(roomId);
+
+  socket.emit(SocketEvents.ROOM_JOINED, { roomId });
+
+  socket.to(roomId).emit(SocketEvents.PLAYER_JOINED, getUserObject(userId));
+}
+
+async function handleGetRoomInformation(
+  io,
+  socket,
+  pubClient,
+  roomId,
+  callback
+) {
+  const userId = socket.user.id;
+  if (!userId) return;
+
+  const roomKey = `room:${roomId}`;
+  const userKey = `user:${userId}`;
+
+  const roomExists = await pubClient.exists(roomKey);
+  if (!roomExists) {
+    socket.emit("error", {
+      message: `Room ${roomId} does not exist.`,
+    });
+    return;
+  }
+
+  const roomData = await pubClient.hGetAll(roomKey);
+
+  let parsedRoomData;
+  try {
+    const playerIds = JSON.parse(roomData.players ?? "[]");
+
+    const playersWithDetails = await Promise.all(
+      playerIds.map(async (playerId) => {
+        return await getUserObject(playerId);
+      })
+    );
+
+    parsedRoomData = {
+      ...roomData,
+      players: playersWithDetails,
+    };
+  } catch (err) {
+    parsedRoomData = {
+      ...roomData,
+      players: [],
+    };
+  }
+
+  callback({ roomData: parsedRoomData });
+}
+
+async function handleGameStart(
+  io,
+  socket,
+  roomId,
+  categoryId,
+  numberOfQuestions = 5
+) {
+  emitToRoom(io, roomId, SocketEvents.ROOM_QUIZ_STARTED);
+  await delay(3);
+  runQuizLoopForRoom(io, roomId, categoryId, numberOfQuestions);
 }
 
 function handleClientReady(io, matchId, socket) {
@@ -79,18 +194,15 @@ function handleClientReady(io, matchId, socket) {
   }
 }
 
-async function handleDisconnect(socket) {
+async function handleDisconnect(socket, pubClient) {
   const userId = socket.user.id;
   if (!userId) return;
 
   removeActiveUser(userId);
   removeFromQueue(userId);
-  const roomId = await redisClient.hGet(`user:${userId}`, "currentRoom");
 
-  if (roomId) {
-    // Remove from room's player list before deleting user => room mapping
-    await redisClient.del(`user:${userId}`);
-  }
+  await removePlayerFromRoom(socket, pubClient, userId);
+
   const userObj = getUserObject(userId);
   console.log(`${userObj.username} disconnected`);
 }
@@ -98,6 +210,9 @@ async function handleDisconnect(socket) {
 module.exports = {
   handleJoinQueue,
   handleCreateRoom,
+  handleJoinRoom,
+  handleGetRoomInformation,
+  handleGameStart,
   handleClientReady,
   handleDisconnect,
 };

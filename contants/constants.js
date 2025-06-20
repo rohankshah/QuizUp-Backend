@@ -3,6 +3,8 @@ const SocketEvents = {
   JOIN_QUEUE: "join-queue",
   CREATE_ROOM: "create-room",
   ROOM_JOINED: "room-joined",
+  JOIN_ROOM: "join-room",
+  PLAYER_JOINED: "player-joined",
   MATCHED: "matched",
   START_QUIZ: "start-quiz",
   CLIENT_READY: "client-ready",
@@ -11,6 +13,12 @@ const SocketEvents = {
   QUIZ_ANSWER_RESULT_EVENT: "quiz-answer-result-event",
   QUIZ_HANDLE_RESULTS_EVENT: "quiz-handle-results-event",
   DISCONNECT: "disconnect",
+
+  GET_ROOM_INFO_BY_ID: "get-room-info-by-id",
+  PLAYER_LEFT: "player-left",
+
+  ROOM_START_QUIZ: "room-start-quiz",
+  ROOM_QUIZ_STARTED: "room-quiz-started"
 };
 
 const number_of_players = 2;

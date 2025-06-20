@@ -4,6 +4,9 @@ const {
   handleClientReady,
   handleDisconnect,
   handleCreateRoom,
+  handleJoinRoom,
+  handleGetRoomInformation,
+  handleGameStart,
 } = require("./SocketEvents");
 const { addActiveUser } = require("./state/activeUsers");
 
@@ -24,11 +27,23 @@ function socketHandler(io, socket, pubClient) {
     handleCreateRoom(io, socket, pubClient)
   );
 
+  socket.on(SocketEvents.JOIN_ROOM, (data) => {
+    handleJoinRoom(io, socket, pubClient, data.roomId);
+  });
+
+  socket.on(SocketEvents.GET_ROOM_INFO_BY_ID, (data, callback) => {
+    handleGetRoomInformation(io, socket, pubClient, data.roomId, callback);
+  });
+
+  socket.on(SocketEvents.ROOM_START_QUIZ, (data) => {
+    handleGameStart(io, socket, data.roomId, data.categoryId)
+  });
+
   socket.on(SocketEvents.CLIENT_READY, (matchId) =>
     handleClientReady(io, matchId, socket)
   );
 
-  socket.on(SocketEvents.DISCONNECT, () => handleDisconnect(socket));
+  socket.on(SocketEvents.DISCONNECT, () => handleDisconnect(socket, pubClient));
 }
 
 module.exports = socketHandler;

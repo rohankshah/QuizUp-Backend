@@ -1,13 +1,17 @@
 const { debounce } = require("lodash");
 const { SocketEvents, number_of_players } = require("../contants/constants");
-const questions = require("../questions");
 const {
   getSocketIdByPlayerId,
   delay,
   createScoreArray,
   processAnswers,
+  getRandomQuestionsByCategoryId,
 } = require("./GameUtils");
-const { emitToMultipleSockets, emitToSingleSocket } = require("./SocketUtils");
+const {
+  emitToMultipleSockets,
+  emitToSingleSocket,
+  emitToRoom,
+} = require("./SocketUtils");
 const { setMatchReadiness } = require("./state/matchReadiness");
 const { hasGroup, dequeueGroup } = require("./state/queue");
 const { getUserObject } = require("./state/userObjects");
@@ -57,7 +61,8 @@ function _tryMatchUsers(io) {
 
 const tryMatchUsers = debounce(_tryMatchUsers, 50);
 
-async function waitForAnswers(sockets, players, questionIndex) {
+async function waitForAnswers(io, roomId, questionIndex) {
+  const players = await io.in(roomId).fetchSockets();
   return new Promise((resolve) => {
     let resolved = false;
     let answers = {};
@@ -66,7 +71,7 @@ async function waitForAnswers(sockets, players, questionIndex) {
     function checkAndResolve() {
       if (
         !resolved &&
-        players.every((playerId) => answers[playerId] !== undefined)
+        players.every((socket) => answers[socket.user.id] !== undefined)
       ) {
         resolved = true;
         cleanUp();
@@ -84,9 +89,8 @@ async function waitForAnswers(sockets, players, questionIndex) {
     }
 
     // Create answer handlers for each player and attach to their sockets
-    players.forEach((playerId, index) => {
-      const socket = sockets[index];
-      const answerHandler = createAnswerHandler(playerId);
+    players.forEach((socket) => {
+      const answerHandler = createAnswerHandler(socket.user.id);
       answerHandlers.push({ socket, handler: answerHandler });
       socket.on(SocketEvents.QUIZ_ANSWER_RECEIVE_EVENT, answerHandler);
     });
@@ -108,10 +112,59 @@ async function waitForAnswers(sockets, players, questionIndex) {
   });
 }
 
-async function handleQuizResults(io, sockets, scoreObj) {
-  emitToMultipleSockets(io, sockets, SocketEvents.QUIZ_HANDLE_RESULTS_EVENT, {
+async function handleQuizResults(io, roomId, scoreObj) {
+  emitToRoom(io, roomId, SocketEvents.QUIZ_HANDLE_RESULTS_EVENT, {
     scoreObj,
   });
+}
+
+async function runQuizLoopForRoom(io, roomId, categoryId, numberOfQuestions) {
+  const scoreMap = new Map(); // userId -> score
+
+  const questions = getRandomQuestionsByCategoryId(
+    categoryId,
+    numberOfQuestions
+  );
+
+  for (let i = 0; i <= numberOfQuestions - 1; i++) {
+    const questionObj = questions[i];
+    const correctAnswer = questionObj.correctAnswer;
+
+    emitToRoom(io, roomId, SocketEvents.QUIZ_QUESTION_SEND_EVENT, {
+      question: questionObj.question,
+      options: questionObj.options,
+      questionIndex: i,
+    });
+
+    const answers = await waitForAnswers(io, roomId, i);
+
+    const { answerResults, playersBySelectedOption } = processAnswers(
+      answers,
+      correctAnswer,
+      scoreMap
+    );
+
+    // Emit correct/incorrect to each player
+    for (const playerId of Object.keys(answers)) {
+      const socket = getSocketIdByPlayerId(io, playerId);
+      const { isCorrect, selectedAnswer } = answerResults[playerId];
+
+      emitToSingleSocket(socket, SocketEvents.QUIZ_ANSWER_RESULT_EVENT, {
+        isCorrect,
+        correctAnswer,
+        selectedAnswer,
+        playersBySelectedOption: playersBySelectedOption
+          ? Object.fromEntries(playersBySelectedOption)
+          : {},
+      });
+    }
+
+    await delay(3);
+  }
+
+  const finalScore = createScoreArray(scoreMap);
+
+  handleQuizResults(io, roomId, finalScore);
 }
 
 async function runQuizLoop(io, players) {
@@ -163,4 +216,4 @@ async function runQuizLoop(io, players) {
   handleQuizResults(io, sockets, finalScore);
 }
 
-module.exports = { tryMatchUsers, runQuizLoop };
+module.exports = { tryMatchUsers, runQuizLoopForRoom, runQuizLoop };

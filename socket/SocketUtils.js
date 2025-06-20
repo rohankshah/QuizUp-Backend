@@ -4,8 +4,12 @@ function emitToMultipleSockets(io, sockets, event, payload) {
   });
 }
 
+function emitToRoom(io, roomId, event, payload) {
+  io.to(roomId).emit(event, payload);
+}
+
 function emitToSingleSocket(socket, event, payload) {
   socket.emit(event, payload);
 }
 
-module.exports = { emitToMultipleSockets, emitToSingleSocket };
+module.exports = { emitToMultipleSockets, emitToSingleSocket, emitToRoom };
