@@ -7,6 +7,7 @@ const {
   handleJoinRoom,
   handleGetRoomInformation,
   handleGameStart,
+  handleCategoryChange,
 } = require("./SocketEvents");
 const { addActiveUser } = require("./state/activeUsers");
 
@@ -35,8 +36,12 @@ function socketHandler(io, socket, pubClient) {
     handleGetRoomInformation(io, socket, pubClient, data.roomId, callback);
   });
 
+  socket.on(SocketEvents.CATEGORY_CHANGE, (data) => {
+    handleCategoryChange(io, socket, pubClient, data.roomId, data.categoryId);
+  });
+
   socket.on(SocketEvents.ROOM_START_QUIZ, (data) => {
-    handleGameStart(io, socket, data.roomId, data.categoryId)
+    handleGameStart(io, socket, pubClient, data.roomId);
   });
 
   socket.on(SocketEvents.CLIENT_READY, (matchId) =>

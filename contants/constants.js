@@ -15,6 +15,7 @@ const SocketEvents = {
   DISCONNECT: "disconnect",
 
   GET_ROOM_INFO_BY_ID: "get-room-info-by-id",
+  CATEGORY_CHANGE: "category-change",
   PLAYER_LEFT: "player-left",
 
   ROOM_START_QUIZ: "room-start-quiz",

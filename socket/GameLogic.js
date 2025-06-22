@@ -118,11 +118,23 @@ async function handleQuizResults(io, roomId, scoreObj) {
   });
 }
 
-async function runQuizLoopForRoom(io, roomId, categoryId, numberOfQuestions) {
+async function runQuizLoopForRoom(io, pubClient, roomId, numberOfQuestions) {
+  const roomKey = `room:${roomId}`;
+
+  const roomExists = await pubClient.exists(roomKey);
+  if (!roomExists) {
+    socket.emit("error", {
+      message: `Room ${roomId} does not exist.`,
+    });
+    return;
+  }
+
+  const categoryId = await pubClient.hGet(roomKey, "categoryId");
+
   const scoreMap = new Map(); // userId -> score
 
   const questions = getRandomQuestionsByCategoryId(
-    categoryId,
+    parseInt(categoryId),
     numberOfQuestions
   );
 

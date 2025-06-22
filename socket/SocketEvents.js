@@ -59,6 +59,7 @@ async function handleCreateRoom(io, socket, pubClient) {
       hostId: userId,
       players: players,
       createdAt: new Date().toISOString(),
+      categoryId: "1"
     })
     .expire(roomKey, room_ttl)
     .hSet(userKey, "currentRoom", roomId)
@@ -167,16 +168,39 @@ async function handleGetRoomInformation(
   callback({ roomData: parsedRoomData });
 }
 
+async function handleCategoryChange(io, socket, pubClient, roomId, categoryId) {
+  const userId = socket.user.id;
+  if (!userId) return;
+
+  const roomKey = `room:${roomId}`;
+
+  const roomExists = await pubClient.exists(roomKey);
+  if (!roomExists) {
+    socket.emit("error", {
+      message: `Room ${roomId} does not exist.`,
+    });
+    return;
+  }
+
+  await pubClient.hSet(roomKey, "categoryId", categoryId);
+
+
+  emitToRoom(io, roomId, SocketEvents.CATEGORY_CHANGE, {
+    roomId: roomId,
+    categoryId: categoryId,
+  });
+}
+
 async function handleGameStart(
   io,
   socket,
+  pubClient,
   roomId,
-  categoryId,
   numberOfQuestions = 5
 ) {
   emitToRoom(io, roomId, SocketEvents.ROOM_QUIZ_STARTED);
   await delay(3);
-  runQuizLoopForRoom(io, roomId, categoryId, numberOfQuestions);
+  runQuizLoopForRoom(io, pubClient, roomId, numberOfQuestions);
 }
 
 function handleClientReady(io, matchId, socket) {
@@ -212,6 +236,7 @@ module.exports = {
   handleCreateRoom,
   handleJoinRoom,
   handleGetRoomInformation,
+  handleCategoryChange,
   handleGameStart,
   handleClientReady,
   handleDisconnect,
